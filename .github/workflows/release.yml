@@ -23,7 +23,7 @@ jobs:
       - name: Check tag matches __version__
         shell: pwsh
         run: |
-          $version = python -c "import re; print(re.search(r'__version__ = \"(.+?)\"', open('rename_utility.py').read())[1])"
+          $version = python -c "import rename_utility; print(rename_utility.__version__)"
           if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} != __version__ $version" }
 
       - run: python -m pytest -v
