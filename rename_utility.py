@@ -6,7 +6,6 @@ The core planning and transaction functions are deliberately independent of Qt.
 
 from __future__ import annotations
 
-import html
 import logging
 import os
 from pathlib import Path
@@ -19,7 +18,9 @@ from typing import Callable, List, Optional, Sequence, Tuple
 from qtpy import QtCore, QtGui, QtWidgets
 
 
-FIRST_NAME_RE = re.compile(r"^(?P<prefix>.*?)(?P<num>\d+)$")
+__version__ = "1.0.0"
+APP_NAME = "HEX File Rename Utility"
+
 AUTO_RENAME_FOLDER_RE = re.compile(
     r"^(?:(?:C)?MFLB|EGPB)(?P<hid>\d+)S(?P<sid>\d+)$", re.IGNORECASE
 )
@@ -48,21 +49,9 @@ class PreviewSnapshot:
     """Everything whose change makes a displayed preview unsafe to apply."""
 
     root_path: str
-    automatic: bool
-    target_input: str
     plans: Tuple[RenameFolderPlan, ...]
     warnings: Tuple[str, ...]
     file_signatures: Tuple[Tuple[str, str, int, int], ...]
-
-
-def parse_first_name(user_input: str) -> Tuple[str, int, int]:
-    text = user_input.strip()
-    base = text[:-4] if text.lower().endswith(".hex") else text
-    match = FIRST_NAME_RE.fullmatch(base)
-    if not match:
-        raise ValueError("First name must end with digits, e.g. HID04SID02_0000")
-    digits = match.group("num")
-    return match.group("prefix"), int(digits), len(digits)
 
 
 def collect_hex_files_non_recursive(dir_path: str) -> List[str]:
@@ -70,12 +59,6 @@ def collect_hex_files_non_recursive(dir_path: str) -> List[str]:
         files = [entry.name for entry in entries
                  if entry.is_file() and entry.name.lower().endswith(".hex")]
     return sorted(files, key=natural_key)
-
-
-def build_mapping(files: Sequence[str], prefix: str, start: int,
-                  pad: int) -> List[Tuple[str, str]]:
-    return [(old, f"{prefix}{start + index:0{pad}d}{Path(old).suffix}")
-            for index, old in enumerate(files)]
 
 
 def build_auto_mapping(files: Sequence[str], prefix: str) -> List[Tuple[str, str]]:
@@ -113,18 +96,6 @@ def validate_mapping(dir_path: str,
     if clashes:
         raise FileExistsError("Target names already exist:\n  - " +
                               "\n  - ".join(clashes))
-
-
-def build_manual_plan(folder: str, first_name: str) -> RenameBatchPlan:
-    files = collect_hex_files_non_recursive(folder)
-    if not files:
-        raise ValueError("No .hex files found in the selected folder.")
-    prefix, start, pad = parse_first_name(first_name)
-    mapping = tuple(build_mapping(files, prefix, start, pad))
-    validate_mapping(folder, mapping)
-    return RenameBatchPlan(
-        (RenameFolderPlan(os.path.abspath(folder), Path(folder).name, mapping),), ()
-    )
 
 
 def build_auto_rename_plans(root_path: str) -> RenameBatchPlan:
@@ -172,19 +143,16 @@ def _signatures(plans: Sequence[RenameFolderPlan]) -> Tuple[Tuple[str, str, int,
     return tuple(result)
 
 
-def create_preview_snapshot(root_path: str, automatic: bool,
-                            target_input: str = "") -> PreviewSnapshot:
+def create_preview_snapshot(root_path: str) -> PreviewSnapshot:
     root = os.path.abspath(root_path)
-    batch = (build_auto_rename_plans(root) if automatic
-             else build_manual_plan(root, target_input))
-    return PreviewSnapshot(root, automatic, target_input.strip(), batch.plans,
-                           batch.warnings, _signatures(batch.plans))
+    batch = build_auto_rename_plans(root)
+    return PreviewSnapshot(root, batch.plans, batch.warnings,
+                           _signatures(batch.plans))
 
 
-def preview_is_current(snapshot: PreviewSnapshot, root_path: str,
-                       automatic: bool, target_input: str = "") -> bool:
+def preview_is_current(snapshot: PreviewSnapshot, root_path: str) -> bool:
     try:
-        current = create_preview_snapshot(root_path, automatic, target_input)
+        current = create_preview_snapshot(root_path)
     except (OSError, ValueError):
         return False
     return current == snapshot
@@ -316,19 +284,20 @@ class FileRenameWidget(QtWidgets.QWidget):
         outer = QtWidgets.QVBoxLayout(self)
         outer.setContentsMargins(18, 18, 18, 18)
         outer.setSpacing(12)
-        controls = QtWidgets.QGroupBox("HEX sequence rename")
+        controls = QtWidgets.QGroupBox("Rename HEX files by folder label")
         grid = QtWidgets.QGridLayout(controls)
         self.folder_edit = QtWidgets.QLineEdit()
-        self.folder_edit.setPlaceholderText("Select a folder")
+        self.folder_edit.setPlaceholderText("Select the root folder, e.g. By_Label or HUB")
         self.browse_btn = QtWidgets.QPushButton("Select Folder…")
         self.open_btn = QtWidgets.QPushButton("Open Folder")
         self.open_btn.setEnabled(False)
-        self.first_edit = QtWidgets.QLineEdit()
-        self.first_edit.setPlaceholderText("First target, e.g. HID04SID02_0000.hex")
-        self.auto_check = QtWidgets.QCheckBox(
-            "Automatic mode: immediate MFLB/CMFLB/EGPB subfolders")
+        self.hint = QtWidgets.QLabel(
+            "Each immediate MFLB/CMFLB/EGPB&lt;hub&gt;S&lt;slot&gt; subfolder is renamed to "
+            "<b>HID&lt;hub&gt;SID&lt;slot&gt;_0000.hex</b>, _0001.hex, … "
+            "Other subfolders and loose files are left alone.")
+        self.hint.setWordWrap(True)
         self.preview_btn = QtWidgets.QPushButton("Generate Preview")
-        self.rename_btn = QtWidgets.QPushButton("Proceed & Rename")
+        self.rename_btn = QtWidgets.QPushButton("Proceed && Rename")
         self.rename_btn.setObjectName("primary")
         self.rename_btn.setEnabled(False)
         self.cancel_btn = QtWidgets.QPushButton("Cancel")
@@ -339,15 +308,13 @@ class FileRenameWidget(QtWidgets.QWidget):
         grid.addWidget(self.folder_edit, 0, 1)
         grid.addWidget(self.browse_btn, 0, 2)
         grid.addWidget(self.open_btn, 0, 3)
-        grid.addWidget(QtWidgets.QLabel("First target:"), 1, 0)
-        grid.addWidget(self.first_edit, 1, 1, 1, 3)
-        grid.addWidget(self.auto_check, 2, 1, 1, 3)
+        grid.addWidget(self.hint, 1, 1, 1, 3)
         buttons = QtWidgets.QHBoxLayout()
         for button in (self.preview_btn, self.rename_btn, self.cancel_btn):
             buttons.addWidget(button)
         buttons.addStretch()
-        grid.addLayout(buttons, 3, 1, 1, 3)
-        grid.addWidget(self.progress, 4, 0, 1, 4)
+        grid.addLayout(buttons, 2, 1, 1, 3)
+        grid.addWidget(self.progress, 3, 0, 1, 4)
 
         self.table = QtWidgets.QTableWidget(0, 2)
         self.table.setHorizontalHeaderLabels(["Old name", "New name"])
@@ -371,9 +338,7 @@ class FileRenameWidget(QtWidgets.QWidget):
         self.preview_btn.clicked.connect(self._preview)
         self.rename_btn.clicked.connect(self._rename)
         self.cancel_btn.clicked.connect(self._cancel)
-        self.auto_check.toggled.connect(self._mode_changed)
         self.folder_edit.textChanged.connect(self._invalidate)
-        self.first_edit.textChanged.connect(self._invalidate)
 
     def _append_log(self, _level: int, message: str) -> None:
         self.log_view.appendPlainText(message)
@@ -381,10 +346,6 @@ class FileRenameWidget(QtWidgets.QWidget):
     def _invalidate(self, *_args) -> None:
         self.snapshot = None
         self.rename_btn.setEnabled(False)
-
-    def _mode_changed(self, enabled: bool) -> None:
-        self.first_edit.setEnabled(not enabled)
-        self._invalidate()
 
     def _browse(self) -> None:
         folder = QtWidgets.QFileDialog.getExistingDirectory(self, "Select rename folder")
@@ -403,8 +364,7 @@ class FileRenameWidget(QtWidgets.QWidget):
             QtWidgets.QMessageBox.warning(self, "Invalid folder", "Select a valid folder first.")
             return
         try:
-            snapshot = create_preview_snapshot(
-                folder, self.auto_check.isChecked(), self.first_edit.text())
+            snapshot = create_preview_snapshot(folder)
         except Exception as exc:
             self.logger.error("Preview failed: %s", exc)
             QtWidgets.QMessageBox.critical(self, "Validation error", str(exc))
@@ -427,13 +387,12 @@ class FileRenameWidget(QtWidgets.QWidget):
         snapshot = self.snapshot
         if snapshot is None:
             return
-        if not preview_is_current(snapshot, self.folder_edit.text(),
-                                  self.auto_check.isChecked(), self.first_edit.text()):
+        if not preview_is_current(snapshot, self.folder_edit.text()):
             self._invalidate()
             self.table.setRowCount(0)
             QtWidgets.QMessageBox.warning(
                 self, "Preview out of date",
-                "The folders, files, or target input changed. Generate a new preview.")
+                "The folders or files changed. Generate a new preview.")
             return
         count = sum(len(plan.mapping) for plan in snapshot.plans)
         if QtWidgets.QMessageBox.question(
@@ -449,11 +408,9 @@ class FileRenameWidget(QtWidgets.QWidget):
         self.worker.start()
 
     def _set_running(self, running: bool) -> None:
-        for widget in (self.folder_edit, self.first_edit, self.auto_check,
-                       self.browse_btn, self.preview_btn, self.rename_btn):
+        for widget in (self.folder_edit, self.browse_btn, self.preview_btn,
+                       self.rename_btn):
             widget.setEnabled(not running)
-        if not running:
-            self.first_edit.setEnabled(not self.auto_check.isChecked())
         self.cancel_btn.setEnabled(running)
 
     def _cancel(self) -> None:
@@ -484,13 +441,14 @@ class FileRenameWidget(QtWidgets.QWidget):
         self.rename_btn.setEnabled(False)
         self.table.setRowCount(0)
         self.progress.setValue(0)
+        self.progress.setFormat("0% (0/0 steps)")
         self.worker = None
 
 
 class RenameMainWindow(QtWidgets.QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("HEX File Rename Utility")
+        self.setWindowTitle(f"{APP_NAME} v{__version__}")
         self.setMinimumSize(900, 650)
         self.setCentralWidget(FileRenameWidget())
         self.setStyleSheet("""
@@ -505,14 +463,24 @@ class RenameMainWindow(QtWidgets.QMainWindow):
             QPushButton:hover { background: #d8e0ea; }
             QPushButton#primary { background: #1976d2; color: white; border-color: #1976d2; }
             QPushButton#primary:hover { background: #1565c0; }
-            QPushButton:disabled { color: #94a3b8; background: #edf1f5; }
+            QPushButton:disabled, QPushButton#primary:disabled {
+                          color: #94a3b8; background: #edf1f5; border-color: #cbd5e1; }
             QHeaderView::section { background: #e8eef5; padding: 6px; border: 0; }
+            QProgressBar { background: white; border: 1px solid #cbd5e1;
+                           border-radius: 4px; text-align: center; min-height: 18px; }
+            QProgressBar::chunk { background: #47a9df; border-radius: 3px; }
         """)
 
 
 def main() -> int:
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv)
-    app.setApplicationName("HEX File Rename Utility")
+    app.setApplicationName(APP_NAME)
+    app.setApplicationVersion(__version__)
+    # PyInstaller unpacks bundled data under sys._MEIPASS.
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    icon = base / "images" / "app-icon.ico"
+    if icon.is_file():
+        app.setWindowIcon(QtGui.QIcon(str(icon)))
     window = RenameMainWindow()
     window.show()
     return app.exec_()
