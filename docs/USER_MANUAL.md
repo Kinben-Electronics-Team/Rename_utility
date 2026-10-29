@@ -2,7 +2,7 @@
 
 # HEX File Rename Utility: User Manual
 
-**Version 1.0.0** · Windows 10 / 11 · single-file `RenameUtility.exe`, no install needed
+**Version 1.0.1** · Windows 10 / 11 · single-file `RenameUtility.exe`, no install needed
 
 This manual walks through a real job. The dataset is `By_Label_24inch_CMFL.zip` from a 24-inch CMFL run, extracted to `C:\ILI_Data\By_Label`. The dataset holds 52 sensor folders and 107 `.hex` files. 43 of those files still carry the factory name `HID255SID255_…`.
 

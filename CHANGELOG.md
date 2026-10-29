@@ -2,9 +2,16 @@
 
 All notable changes to the HEX File Rename Utility. Versions follow [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] - 2026-10-29
+
+First published release. The app is the same as 1.0.0.
+
+### Fixed
+- Release workflow: the tag/version check failed on PowerShell quoting, so `v1.0.0` was tagged but never built or published.
+
 ## [1.0.0] - 2026-10-29
 
-First release.
+Tagged only. Not published (see 1.0.1).
 
 ### Added
 - Renames the `.hex` files in every immediate `MFLB<hub>S<slot>`, `CMFLB<hub>S<slot>` and `EGPB<hub>S<slot>` subfolder to `HID<hub>SID<slot>_0000.hex`, `_0001.hex`, …, so the names match the board label.
