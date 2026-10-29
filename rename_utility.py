@@ -18,7 +18,7 @@ from typing import Callable, List, Optional, Sequence, Tuple
 from qtpy import QtCore, QtGui, QtWidgets
 
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 APP_NAME = "HEX File Rename Utility"
 
 AUTO_RENAME_FOLDER_RE = re.compile(

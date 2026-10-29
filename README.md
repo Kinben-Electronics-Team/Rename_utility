@@ -5,7 +5,7 @@
 **Renames KinSense sensor `.hex` recordings to match the label on the board that recorded them. It previews every change first and applies the whole batch as one transaction that can be rolled back.**
 
 ![Status](https://img.shields.io/badge/status-production-47A9DF?style=flat-square)
-![Version](https://img.shields.io/badge/version-1.0.0-0A74A0?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.0.1-0A74A0?style=flat-square)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-47A9DF?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-0A74A0?style=flat-square)
 ![Qt](https://img.shields.io/badge/GUI-PySide6%20(Qt%206)-47A9DF?style=flat-square)

@@ -1,16 +1,16 @@
 # Windows version resource embedded in RenameUtility.exe.
 # Keep filevers/prodvers and the strings in step with __version__ in rename_utility.py.
 VSVersionInfo(
-  ffi=FixedFileInfo(filevers=(1, 0, 0, 0), prodvers=(1, 0, 0, 0)),
+  ffi=FixedFileInfo(filevers=(1, 0, 1, 0), prodvers=(1, 0, 1, 0)),
   kids=[
     StringFileInfo([StringTable("040904B0", [
       StringStruct("CompanyName", "Kinben Innovation Pvt. Ltd."),
       StringStruct("FileDescription", "HEX File Rename Utility"),
-      StringStruct("FileVersion", "1.0.0"),
+      StringStruct("FileVersion", "1.0.1"),
       StringStruct("InternalName", "RenameUtility"),
       StringStruct("OriginalFilename", "RenameUtility.exe"),
       StringStruct("ProductName", "HEX File Rename Utility"),
-      StringStruct("ProductVersion", "1.0.0"),
+      StringStruct("ProductVersion", "1.0.1"),
     ])]),
     VarFileInfo([VarStruct("Translation", [1033, 1200])]),
   ],
