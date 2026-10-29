@@ -1,0 +1,57 @@
+name: Release
+
+# Push a tag like v1.0.1 to build RenameUtility.exe and publish it as a GitHub Release.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: pip install -r requirements-dev.txt
+
+      - name: Check tag matches __version__
+        shell: pwsh
+        run: |
+          $version = python -c "import re; print(re.search(r'__version__ = \"(.+?)\"', open('rename_utility.py').read())[1])"
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} != __version__ $version" }
+
+      - run: python -m pytest -v
+        env:
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Build EXE
+        shell: pwsh
+        run: |
+          pyinstaller --noconfirm --clean RenameUtility.spec
+          $hash = (Get-FileHash dist\RenameUtility.exe -Algorithm SHA256).Hash.ToLower()
+          "$hash  RenameUtility.exe" | Set-Content -Encoding ascii dist\RenameUtility.exe.sha256
+          "SHA256=$hash" >> $env:GITHUB_ENV
+
+      - name: Extract release notes from CHANGELOG.md
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart("v")
+          $lines = Get-Content CHANGELOG.md
+          $start = ($lines | Select-String -Pattern "^## \[$([regex]::Escape($tag))\]").LineNumber
+          if (-not $start) { throw "No CHANGELOG.md entry for $tag" }
+          $rest = $lines[$start..($lines.Count - 1)]
+          $end = ($rest | Select-String -Pattern "^## " | Select-Object -First 1).LineNumber
+          $body = if ($end) { $rest[0..($end - 2)] } else { $rest }
+          $body += "", "**SHA-256** ``RenameUtility.exe``: ``$env:SHA256``", "", "User manual: [docs/USER_MANUAL.md](../../blob/${{ github.ref_name }}/docs/USER_MANUAL.md)"
+          $body | Set-Content -Encoding utf8 notes.md
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/RenameUtility.exe dist/RenameUtility.exe.sha256 --title "HEX File Rename Utility ${{ github.ref_name }}" --notes-file notes.md
